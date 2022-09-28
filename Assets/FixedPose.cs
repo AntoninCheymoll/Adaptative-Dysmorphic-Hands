@@ -7,6 +7,8 @@ public class FixedPose : MonoBehaviour
     OVRGrabber grabber = null ;
     List<GameObject> pose_go_list = new List<GameObject>();
     GameObject grabbed = null;
+    [HideInInspector]
+    public bool meshShouldntBeActivated = false;
 
     // Start is called before the first frame update
     void Start()
@@ -20,7 +22,9 @@ public class FixedPose : MonoBehaviour
     // Update is called once per frame
     void Update()
     {
-        if(grabber == null) grabber = GetComponent<HandComponentManager>().real().wrist.GetComponent<OVRGrabber>();
+       /* meshShouldntBeActivated = false;
+
+        if (grabber == null) grabber = GetComponent<HandComponentManager>().real().wrist.GetComponent<OVRGrabber>();
 
         foreach (GameObject grab_obj in pose_go_list)
         { 
@@ -34,29 +38,27 @@ public class FixedPose : MonoBehaviour
                 {
                     grab_obj.SetActive(true);
                     GetComponent<HandComponentManager>().virtuall().mesh.enabled = false;
+                    meshShouldntBeActivated = true;
                     grabber.grabbedObject.GetComponent<MeshRenderer>().enabled = false;
                     grabbed = grabber.grabbedObject.gameObject;
                 }
-
-                
             }
             else
             {
                 grab_obj.SetActive(false);
             }
-            
-
         }
 
         if (grabber.grabbedObject == null)
         {
-            GetComponent<HandComponentManager>().virtuall().mesh.enabled = true;
             if(grabbed != null)
             {
+
                 grabbed.GetComponent<MeshRenderer>().enabled = true;
                 grabbed = null;
             }
             
         }
+       */
     }
 }

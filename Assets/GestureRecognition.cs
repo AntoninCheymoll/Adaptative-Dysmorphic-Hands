@@ -1,6 +1,7 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using static HandComponentManager;
 
 public class GestureRecognition : MonoBehaviour
 {
@@ -23,7 +24,10 @@ public class GestureRecognition : MonoBehaviour
     readonly int shake_ignoreFrames = 20;
     int shake_remaingingFrameToIgnore = 0;
 
-    
+    public bool shake_detected = false;
+    public bool fist_detected = false;
+     
+
     // Start is called before the first frame update
     void Start()
     {
@@ -35,6 +39,10 @@ public class GestureRecognition : MonoBehaviour
     {
         timeCpt++;
 
+        if (shake_detected) return;
+
+
+
         if (shake_remaingingFrameToIgnore == 0)
         {
 
@@ -43,7 +51,7 @@ public class GestureRecognition : MonoBehaviour
                 shake_DetectedTimePoints.RemoveAt(0);
             }
 
-            if (shake_MiddleKnuckle == null) shake_MiddleKnuckle = GetComponent<HandComponentManager>().real().middle().tip.gameObject;
+            if (shake_MiddleKnuckle == null) shake_MiddleKnuckle = GetComponent<HandComponentManager>().getHand(HandType.real).middle().tip.gameObject;
 
             Vector3 currentPosition = shake_MiddleKnuckle.transform.position;
             if (shake_previousAcceleration != null)
@@ -69,17 +77,24 @@ public class GestureRecognition : MonoBehaviour
 
             if (shake_DetectedTimePoints.Count > shake_DetectedThreshold)
             {
-                InteractableManager.shared.cancelTransformation(gameObject);
-                shake_DetectedTimePoints = new List<int>();
-                shake_remaingingFrameToIgnore = shake_ignoreFrames;
+                //InteractableManager.shared.cancelTransformation(gameObject);
+                //shake_DetectedTimePoints = new List<int>();
+                shake_detected = true;
             }
             else
             {
+
             }
 
         }
         else shake_remaingingFrameToIgnore--;
 
 
-}
+    }
+
+    public void shake_Received()
+    {
+        shake_remaingingFrameToIgnore = shake_ignoreFrames;
+        shake_detected = false;
+    }
 }

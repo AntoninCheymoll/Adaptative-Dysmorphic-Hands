@@ -1,57 +1,143 @@
-﻿using System.Collections;
+﻿using System;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
-
+using static HandComponentManager;
+using static InteractableManager;
+using static SystemManager;
 
 public class HandTransformation : MonoBehaviour
 {
+    OVRGrabber grabber = null;
+    public enum InteractionMode { normal, longer, restructure, hammer, trash, mailbox, duplicate, scissors}
+
     static List<HandTransformation> allHands = new List<HandTransformation>();
     HandComponentManager handComponentManager;
+    
     public InteractableManager.InteractableType previousInteraction = InteractableManager.InteractableType.Null;
+    public InteractionMode previousInteractionMode = InteractionMode.normal;
 
     Dictionary<Vector3, GameObject> associatedVectorHand = new Dictionary<Vector3, GameObject>();
+    (int, int) currentTransfoInContext = (-1,-1);
+
+    bool hand_were_duplicated = false;
+    //Dictionary<InteractableManager.InteractableType, (int, int)> currentTransfoInContext = new Dictionary<InteractableManager.InteractableType, (int, int)>();
 
     void Start()
     {
         allHands.Add(this);
         handComponentManager = GetComponent<HandComponentManager>();
+        if (grabber == null) handComponentManager.getHand(HandType.real).wrist.GetComponent<OVRGrabbable>();
+
+        /*SystemManager.TransitionMode tm = SystemManager.getCurrentSystemTransistionMode();
+
+        foreach (InteractableManager.InteractableType interaction in System.Enum.GetValues(typeof(InteractableManager.InteractableType) )) {
+            currentTransfoInContext.Add(interaction, ((tm == SystemManager.TransitionMode.Mix)? 0: 1, 2));
+        }
+
+        currentTransfoInContext[InteractableManager.InteractableType.File] = (1, 3);
+        */
     }
 
     void Update()
-    {   
-        InteractableManager.InteractableType interaction = InteractableManager.shared.getCloseInterctable(gameObject);
-        
-        float rock_augment_ratio = interaction == InteractableManager.InteractableType.Rock? InteractableManager.shared.Rock_FingerProportion: 1;
-        
-        foreach (FingerTransforms ft in GetComponent<HandComponentManager>().virtuall().allFingers.Values)
-        {
-            Transform knuckle = ft.knuckles[0];
-            knuckle.localScale = new Vector3(rock_augment_ratio, 1, 1);
+    {
+        // get the current interaction state 
+        InteractableType interaction = shared.getCloseInterctable(gameObject);
+        InteractionMode interactMode = InteractionMode.normal;
 
-            for (int i = 1; i < 3; i++)
+        //Detect change of transition mode 
+        if (Global.getSystemManager().didtransitionModeChanged || currentTransfoInContext.Equals((-1, -1)))
+        {
+            resetCurrentTransfoInContext(interaction);
+        }
+
+        // if we changed context 
+        else if(interaction != previousInteraction)
+        {
+            resetCurrentTransfoInContext(interaction);
+        }
+
+        else if(GetComponent<GestureRecognition>().shake_detected && Global.getSystemManager().transition_mode != TransitionMode.Command)
+        {
+            GetComponent<GestureRecognition>().shake_Received();
+            currentTransfoInContext = ((currentTransfoInContext.Item1 + 1)% currentTransfoInContext.Item2, currentTransfoInContext.Item2);
+        }
+
+        if (Global.getSystemManager().transition_mode == TransitionMode.Command)
+        {
+            interactMode = Global.getSystemManager().getCurrentCommandInteraction(GetComponent<HandComponentManager>().handness);
+
+        }
+        else if (currentTransfoInContext.Item1 == 0)
+        {
+            interactMode = InteractionMode.normal;
+        }
+        else if (interaction == InteractableType.Null)
+        {
+            interactMode = InteractionMode.normal;
+        }
+        else if( interaction == InteractableType.Cups)
+        {
+            interactMode = InteractionMode.duplicate;
+        }
+        else if (interaction == InteractableType.Buttons) {
+            
+            interactMode = InteractionMode.restructure;
+        }
+        else if (interaction == InteractableType.Nail) {
+            
+            interactMode = InteractionMode.hammer;
+        }
+        else if (interaction == InteractableType.Rock) {
+
+            interactMode = InteractionMode.longer;
+            
+        }
+        else if (interaction == InteractableType.File)
+        {
+            if(currentTransfoInContext.Item1 == 1)
             {
-                knuckle = ft.knuckles[i];
-                Transform parent = knuckle.transform.parent;
-                knuckle.transform.parent = null;
-                knuckle.localScale = new Vector3(rock_augment_ratio, 1, 1);
-                knuckle.transform.parent = parent;
+                interactMode = InteractionMode.trash;
+            }
+            else
+            {
+                interactMode = InteractionMode.mailbox;
             }
         }
 
-        if (interaction == InteractableManager.InteractableType.Buttons)
+        handComponentManager.activate(interactMode, interactMode != previousInteractionMode);
+
+        if(handComponentManager.getHand(HandType.virtual_longer).go.activeSelf)
         {
+            foreach (FingerTransforms ft in handComponentManager.getHand(HandType.virtual_longer).allFingers.Values)
+            {
+                Transform knuckle = ft.knuckles[0];
+                knuckle.localScale = new Vector3(shared.Rock_FingerProportion, 1, 1);
+
+                for (int i = 1; i < 3; i++)
+                {
+                    knuckle = ft.knuckles[i];
+                    Transform parent = knuckle.transform.parent;
+                    knuckle.transform.parent = null;
+                    knuckle.localScale = new Vector3(shared.Rock_FingerProportion, 1, 1);
+                    knuckle.transform.parent = parent;
+                }
+            }
+        }
+
+        if (handComponentManager.getHand(HandType.virtual_restructure).go.activeSelf)
+        {
+            HandComponents hand = handComponentManager.getHand(HandType.virtual_restructure);
+            Vector3 initialHandPos = hand.wrist.position;
+            Quaternion initialHandRot = hand.wrist.rotation;
 
 
-            Vector3 initialHandPos = handComponentManager.virtuall().wrist.position;
-            Quaternion initialHandRot = handComponentManager.virtuall().wrist.rotation;
-
-
-            handComponentManager.virtuall().wrist.position = InteractableManager.shared.Buttons_Center.position;
-            handComponentManager.virtuall().wrist.rotation = (handComponentManager.handness == HandComponentManager.Handness.right) ? Quaternion.Euler(0, -90, 0) : Quaternion.Euler(180, 90, 0);
+            hand.wrist.position = Global.getInteractableManager().Buttons_Center.position;
+            hand.wrist.rotation = (handComponentManager.handness == HandComponentManager.Handness.right) ? Quaternion.Euler(0, -90, 0) : Quaternion.Euler(180, 90, 0);
 
 
             int cpt = 1;
-            foreach (FingerTransforms ft in GetComponent<HandComponentManager>().virtuall().allFingers.Values)
+            foreach (FingerTransforms ft in hand.allFingers.Values)
             {
 
                 //Find the button associated to the hand 
@@ -63,7 +149,7 @@ public class HandTransformation : MonoBehaviour
                 if (ft.fingerName.Equals(Global.FingerNames.Pinky)) associate_button_nb = (handComponentManager.handness == HandComponentManager.Handness.right) ? 5 : 1;
 
                 GameObject associate_button = null;
-                foreach (GameObject button in InteractableManager.shared.Buttons__GOList) if (button.name == "Button (" + associate_button_nb + ")") associate_button = button;
+                foreach (GameObject button in Global.getInteractableManager().Buttons__GOList) if (button.name == "Button (" + associate_button_nb + ")") associate_button = button;
 
                 //Change finger orientation
                 Vector3 orientationDiff_To_RestPose = GetComponent<HandComponentManager>().rest_pose[ft.fingerName] - ft.knuckles[0].localEulerAngles;
@@ -102,25 +188,21 @@ public class HandTransformation : MonoBehaviour
 
 
                 cpt++;
-
-
-
             }
 
-            handComponentManager.virtuall().wrist.position = initialHandPos;
-            handComponentManager.virtuall().wrist.rotation = initialHandRot;
-
-            
+            hand.wrist.position = initialHandPos;
+            hand.wrist.rotation = initialHandRot;
         }
 
-        if(interaction == InteractableManager.InteractableType.Cups)
+        if( handComponentManager.duplicateHandsHolder.activeSelf)
         {
-            if(!interaction.Equals(previousInteraction))
+
+            if(interactMode == InteractionMode.duplicate && interactMode != previousInteractionMode)
             {
                 GameObject closest_cup = null;
                 float closest_dist = float.MaxValue;
 
-                foreach (GameObject cup in InteractableManager.shared.Cup_GOList)
+                foreach (GameObject cup in Global.getInteractableManager().Cup_GOList)
                 {
 
                     if(Vector3.Distance(transform.position, cup.transform.position) < closest_dist)
@@ -131,17 +213,17 @@ public class HandTransformation : MonoBehaviour
                 }
 
                 associatedVectorHand = new Dictionary<Vector3, GameObject>();
-                foreach (GameObject cup in InteractableManager.shared.Cup_GOList)
+                int i = 0;
+                foreach (GameObject cup in Global.getInteractableManager().Cup_GOList)
                 {
-                    if (!cup.Equals(closest_cup))
-                    {
-                        GameObject go = Instantiate(handComponentManager.handness == HandComponentManager.Handness.right ? InteractableManager.shared.Cup_RightHandPrefab : InteractableManager.shared.Cup_LeftHandPrefab);
-                        go.transform.parent = transform.parent.parent;
+                    //if (!cup.Equals(closest_cup))
+                    //{
+                        GameObject go = handComponentManager.duplicateHands[i];
                         go.transform.localEulerAngles = Vector3.zero;
 
                         associatedVectorHand.Add(cup.transform.position - closest_cup.transform.position, go);
-                    }
-                    
+                    //}
+                    i++;
                 }
             }
 
@@ -152,24 +234,20 @@ public class HandTransformation : MonoBehaviour
                 p.Value.transform.rotation = transform.rotation;
             }
 
-        }
-        else
-        {
-            foreach (KeyValuePair<Vector3, GameObject> p in associatedVectorHand)
-            {
-                Destroy(p.Value);
-            }
+            hand_were_duplicated = true;
+
         }
 
-        foreach (GameObject button in InteractableManager.shared.Buttons__GOList)
+
+        foreach (GameObject button in Global.getInteractableManager().Buttons__GOList)
         {
             button.GetComponent<ButtonBehavior>().reset();
 
             // check if the colliser interact with a button 
-            foreach (FingerTransforms ft in GetComponent<HandComponentManager>().virtuall().allFingers.Values)
+            foreach (FingerTransforms ft in handComponentManager.getHand(HandType.virtual_restructure).allFingers.Values)
             {
 
-                if (Vector3.Distance(button.GetComponent<Collider>().bounds.ClosestPoint(ft.tip.transform.position), ft.tip.transform.position) < InteractableManager.shared.Buttons_RangeToActivate)
+                if (Vector3.Distance(button.GetComponent<Collider>().bounds.ClosestPoint(ft.tip.transform.position), ft.tip.transform.position) < Global.getInteractableManager().Buttons_RangeToActivate)
                 {
                     button.GetComponent<ButtonBehavior>().activate();
                 }
@@ -177,8 +255,30 @@ public class HandTransformation : MonoBehaviour
         }
 
         previousInteraction = interaction;
+        previousInteractionMode = interactMode;
     }
 
+
+    private void resetCurrentTransfoInContext(InteractableManager.InteractableType it)
+    {
+        switch (Global.getSystemManager().transition_mode)
+        {
+            case SystemManager.TransitionMode.Command:
+                currentTransfoInContext = (1, 0);
+                break;
+
+            default:
+
+                if(it == InteractableManager.InteractableType.Null) currentTransfoInContext = (1, 1);
+                else if(it == InteractableManager.InteractableType.File) 
+                    currentTransfoInContext = (Global.getSystemManager().transition_mode.Equals(SystemManager.TransitionMode.Mix)?0:1, 3);
+                else 
+                    currentTransfoInContext =(Global.getSystemManager().transition_mode.Equals(SystemManager.TransitionMode.Mix) ? 0 : 1, 2);
+
+                break;
+            
+        }        
+    }
 }
 
 
